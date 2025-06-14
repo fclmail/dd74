@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -46,6 +46,7 @@
 
   <div>
     <button id="connect">Connect Wallet</button>
+    <button onclick="switchToPolygon()">Switch to Polygon</button>
     <span id="wallet"></span>
     <span id="usdcBalance"></span>
   </div>
@@ -97,9 +98,9 @@
 
   <div class="log" id="log"></div>
 
-  <script>
-    const contractAddress = "0x2498Bc50732a655F0DbEa3319B1Cd7DDec884b6a";
-    const abi = [
+<script>
+  const contractAddress = "0x2498Bc50732a655F0DbEa3319B1Cd7DDec884b6a";
+  const abi = [
 	{
 		"inputs": [
 			{
@@ -541,89 +542,165 @@
 	}
 ];
 
-    const tokens = {
-      AAVE: "0x8dff5e27ea6b7ac08ebfdf9eb090f32ee9a30fcf",
-      WBTC: "0x1bfd67037b42cf73acf2047067bd4f2c47d9bfd6",
-      UNI:  "0xb33eaad8d922b1083446dc23f610c2567fb5180f",
-      USDC: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
-      DAI:  "0x8f3cf7ad23cd3cadbd9735aff958023239c6a063",
-      USDT: "0xc2132d05d31c914a87c6611c10748aeb04b58e8f",
-      SHIB: "0x6f8a06447ff6fcf75d803135a7de15ce88c1d4ec",
-      CRV:  "0x172370d5cd63279efa6d502dab29171933a610af",
-      LINK: "0x53e0bca35ec356bd5dddfebbd1fc0fd03fabad39",
-      WETH: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619"
-    };
+  const tokens = {
+    AAVE: "0x8dff5e27ea6b7ac08ebfdf9eb090f32ee9a30fcf",
+    WBTC: "0x1bfd67037b42cf73acf2047067bd4f2c47d9bfd6",
+    UNI:  "0xb33eaad8d922b1083446dc23f610c2567fb5180f",
+    USDC: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+    DAI:  "0x8f3cf7ad23cd3cadbd9735aff958023239c6a063",
+    USDT: "0xc2132d05d31c914a87c6611c10748aeb04b58e8f",
+    SHIB: "0x6f8a06447ff6fcf75d803135a7de15ce88c1d4ec",
+    CRV:  "0x172370d5cd63279efa6d502dab29171933a610af",
+    LINK: "0x53e0bca35ec356bd5dddfebbd1fc0fd03fabad39",
+    WETH: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619"
+  };
 
-    const tokenSelect = document.getElementById('token1');
-    Object.entries(tokens).forEach(([name, addr]) => {
-      const option = document.createElement('option');
-      option.value = addr;
-      option.text = name;
-      tokenSelect.appendChild(option);
-    });
+  const tokenSelect = document.getElementById('token1');
+  Object.entries(tokens).forEach(([name, addr]) => {
+    const option = document.createElement('option');
+    option.value = addr;
+    option.text = name;
+    tokenSelect.appendChild(option);
+  });
 
-    let fallbackProvider, web3Provider, signer, contract, scanning = false, autoscanActive = false, intervalId;
+  let fallbackProvider, web3Provider, signer, contract, scanning = false, autoscanActive = false, intervalId;
 
-    const log = (msg, isProfit = false) => {
-      const timestamp = new Date().toLocaleTimeString();
-      const line = document.createElement('div');
-      line.textContent = `[${timestamp}] ${msg}`;
-      if (isProfit) line.classList.add('green');
-      document.getElementById('log').prepend(line);
-    };
+  const log = (msg, isProfit = false) => {
+    const timestamp = new Date().toLocaleTimeString();
+    const line = document.createElement('div');
+    line.textContent = `[${timestamp}] ${msg}`;
+    if (isProfit) line.classList.add('green');
+    const logDiv = document.getElementById('log');
+    logDiv.prepend(line);
+  };
 
-    async function updateUSDCBalance() {
+  async function updateUSDCBalance() {
+    try {
       const usdc = new ethers.Contract(tokens.USDC, ["function balanceOf(address) view returns (uint256)"], fallbackProvider);
       const balance = await usdc.balanceOf(await signer.getAddress());
       document.getElementById('usdcBalance').innerText = ` | USDC: ${ethers.utils.formatUnits(balance, 6)}`;
+    } catch (err) {
+      log(`Failed to update USDC balance: ${err.message}`);
+    }
+  }
+
+  async function switchToPolygon() {
+    if (!window.ethereum) {
+      log('MetaMask not detected');
+      return;
+    }
+    try {
+      await window.ethereum.request({
+        method: 'wallet_addEthereumChain',
+        params: [{
+          chainId: '0x89',
+          chainName: 'Polygon Mainnet',
+          rpcUrls: ['https://polygon-rpc.com'],
+          nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
+          blockExplorerUrls: ['https://polygonscan.com/']
+        }]
+      });
+      log("Switched to Polygon Mainnet");
+    } catch (err) {
+      log(`Error switching network: ${err.message}`);
+    }
+  }
+
+  document.getElementById('connect').onclick = async () => {
+    if (typeof window.ethereum === 'undefined') {
+      log('MetaMask not detected. Please install MetaMask.');
+      return;
     }
 
-    document.getElementById('connect').onclick = async () => {
-      const polygonNetwork = { name: "polygon", chainId: 137 };
+    try {
+      // Request account access
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
 
+      // Initialize web3 provider
+      web3Provider = new ethers.providers.Web3Provider(window.ethereum, "any");
+
+      // Check network
+      const network = await web3Provider.getNetwork();
+      if (network.chainId !== 137) {
+        log(`Please switch MetaMask network to Polygon Mainnet. Detected Chain ID: ${network.chainId}`);
+        return;
+      }
+
+      signer = web3Provider.getSigner();
+
+      // Setup fallback provider for off-chain calls
       fallbackProvider = new ethers.providers.FallbackProvider([
-        new ethers.providers.JsonRpcProvider({ url: 'https://polygon-rpc.com', skipFetchSetup: true }, polygonNetwork),
-        new ethers.providers.JsonRpcProvider({ url: 'https://rpc-mainnet.matic.network', skipFetchSetup: true }, polygonNetwork),
-        new ethers.providers.JsonRpcProvider({ url: 'https://rpc.ankr.com/polygon', skipFetchSetup: true }, polygonNetwork),
+        new ethers.providers.JsonRpcProvider('https://polygon-rpc.com'),
+        new ethers.providers.JsonRpcProvider('https://rpc-mainnet.matic.network'),
+        new ethers.providers.JsonRpcProvider('https://rpc.ankr.com/polygon'),
       ]);
 
-      web3Provider = new ethers.providers.Web3Provider(window.ethereum);
-      await web3Provider.send("eth_requestAccounts", []);
-      signer = web3Provider.getSigner();
+      // Initialize contract instance
       contract = new ethers.Contract(contractAddress, abi, signer);
 
       const address = await signer.getAddress();
       document.getElementById('wallet').innerText = address;
       await updateUSDCBalance();
-      log("Wallet connected");
-    };
+      log(`Wallet connected: ${address}`);
+    } catch (err) {
+      log(`Connection failed: ${err.message}`);
+    }
+  };
 
-    document.getElementById('approve').onclick = async () => {
-      const usdc = new ethers.Contract(tokens.USDC, ["function approve(address,uint256) public returns(bool)"], signer);
-      await usdc.approve(contractAddress, ethers.constants.MaxUint256);
-      log("USDC approved");
-    };
+  document.getElementById('approve').onclick = async () => {
+    try {
+      const usdc = new ethers.Contract(tokens.USDC, ["function approve(address,uint256) public returns (bool)"], signer);
+      const tx = await usdc.approve(contractAddress, ethers.constants.MaxUint256);
+      log("Approve transaction sent...");
+      await tx.wait();
+      log("USDC approved successfully.");
+    } catch (err) {
+      log(`Approve failed: ${err.message}`);
+    }
+  };
 
-    async function scanSingle(token1Addr) {
-      const router1 = new ethers.Contract("0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff", ["function getAmountsOut(uint amountIn, address[] memory path) public view returns (uint[] memory)"], fallbackProvider);
-      const router2 = new ethers.Contract("0x1b02da8cb0d097eb8d57a175b88c7d8b47997506", ["function getAmountsOut(uint amountIn, address[] memory path) public view returns (uint[] memory)"], fallbackProvider);
+  async function scanSingle(token1Addr) {
+    try {
+      // Routers
+      const router1 = new ethers.Contract(
+        "0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff",
+        ["function getAmountsOut(uint amountIn, address[] memory path) public view returns (uint[] memory)"],
+        fallbackProvider
+      );
+      const router2 = new ethers.Contract(
+        "0x1b02da8cb0d097eb8d57a175b88c7d8b47997506",
+        ["function getAmountsOut(uint amountIn, address[] memory path) public view returns (uint[] memory)"],
+        fallbackProvider
+      );
+
       const tradeAmount = ethers.utils.parseUnits(document.getElementById('tradeAmount').value, 6);
       const minProfit = parseFloat(document.getElementById('minProfit').value);
-      try {
-        const out1 = await router1.getAmountsOut(tradeAmount, [tokens.USDC, token1Addr]);
-        const out2 = await router2.getAmountsOut(tradeAmount, [tokens.USDC, token1Addr]);
-        const price1 = parseFloat(ethers.utils.formatUnits(tradeAmount, 6)) / parseFloat(ethers.utils.formatUnits(out1[1], 18));
-        const price2 = parseFloat(ethers.utils.formatUnits(tradeAmount, 6)) / parseFloat(ethers.utils.formatUnits(out2[1], 18));
-        const profitPerToken = price2 - price1;
-        const totalProfit = profitPerToken * parseFloat(ethers.utils.formatUnits(out1[1], 18));
-        const symbol = Object.keys(tokens).find(key => tokens[key] === token1Addr);
-        log(`Profit: $${totalProfit.toFixed(6)} (${((profitPerToken / price1) * 100).toFixed(2)}%) on ${symbol}`, totalProfit > 0);
 
-        if (document.getElementById('autotrade').checked && totalProfit >= minProfit) {
+      // Get outputs
+      const out1 = await router1.getAmountsOut(tradeAmount, [tokens.USDC, token1Addr]);
+      const out2 = await router2.getAmountsOut(tradeAmount, [tokens.USDC, token1Addr]);
+
+      // Price calculation (USDC per token)
+      const price1 = parseFloat(ethers.utils.formatUnits(tradeAmount, 6)) / parseFloat(ethers.utils.formatUnits(out1[1], 18));
+      const price2 = parseFloat(ethers.utils.formatUnits(tradeAmount, 6)) / parseFloat(ethers.utils.formatUnits(out2[1], 18));
+
+      // Profit per token and total profit
+      const profitPerToken = price2 - price1;
+      const totalProfit = profitPerToken * parseFloat(ethers.utils.formatUnits(out1[1], 18));
+
+      const symbol = Object.keys(tokens).find(key => tokens[key] === token1Addr);
+
+      log(`Profit: $${totalProfit.toFixed(6)} (${((profitPerToken / price1) * 100).toFixed(2)}%) on ${symbol}`, totalProfit > 0);
+
+      if (document.getElementById('autotrade').checked) {
+        const onlyProfitable = document.getElementById('onlyProfitable').checked;
+        if (!onlyProfitable || totalProfit >= minProfit) {
           const useFlash = document.getElementById('useFlashLoan').checked;
           const manualBribe = ethers.utils.parseUnits(document.getElementById('manualBribe').value || '0', 'gwei');
           const retry = document.getElementById('retryTx').checked;
+
           log(useFlash ? "Executing flash loan arbitrage..." : "Executing arbitrage...");
+
           try {
             const tx = await contract.initiateArbitrage(tokens.USDC, token1Addr, manualBribe, {
               gasLimit: ethers.utils.hexlify(1_500_000)
@@ -634,13 +711,13 @@
           } catch (err) {
             log(`Transaction failed: ${err.message}`);
             if (retry) {
-              log("Retrying...");
+              log("Retrying transaction...");
               try {
                 const tx2 = await contract.initiateArbitrage(tokens.USDC, token1Addr, manualBribe, {
                   gasLimit: ethers.utils.hexlify(1_500_000)
                 });
                 await tx2.wait();
-                log("Retry success.");
+                log("Retry successful.");
                 await updateUSDCBalance();
               } catch (err2) {
                 log(`Retry failed: ${err2.message}`);
@@ -648,39 +725,51 @@
             }
           }
         }
-      } catch (e) {
-        log(`Error: ${e.message}`);
       }
+
+    } catch (err) {
+      log(`Error scanning token: ${err.message}`);
     }
+  }
 
-    document.getElementById('start').onclick = () => {
-      scanning = true;
-      const token1 = document.getElementById('token1').value;
-      const intervalSec = parseInt(document.getElementById('scanInterval').value) || 10;
-      log(`Started scanning ${token1} every ${intervalSec} sec`);
-      clearInterval(intervalId);
-      intervalId = setInterval(() => scanSingle(token1), intervalSec * 1000);
-    };
+  document.getElementById('start').onclick = () => {
+    if (scanning) {
+      log("Already scanning");
+      return;
+    }
+    scanning = true;
+    const token1 = document.getElementById('token1').value;
+    const intervalSec = parseInt(document.getElementById('scanInterval').value) || 10;
+    log(`Started scanning ${token1} every ${intervalSec} seconds`);
+    clearInterval(intervalId);
+    intervalId = setInterval(() => scanSingle(token1), intervalSec * 1000);
+  };
 
-    document.getElementById('stop').onclick = () => {
-      clearInterval(intervalId);
-      scanning = false;
-      autoscanActive = false;
-      log("Stopped scanning");
-    };
+  document.getElementById('stop').onclick = () => {
+    clearInterval(intervalId);
+    scanning = false;
+    autoscanActive = false;
+    log("Stopped scanning");
+  };
 
-    document.getElementById('autoscan').onclick = () => {
-      autoscanActive = true;
-      const intervalSec = parseInt(document.getElementById('scanInterval').value) || 10;
-      log("AutoScan All started");
-      clearInterval(intervalId);
-      intervalId = setInterval(async () => {
-        for (const tokenAddr of Object.values(tokens)) {
-          if (!autoscanActive) return;
-          await scanSingle(tokenAddr);
-        }
-      }, intervalSec * 1000);
-    };
-  </script>
+  document.getElementById('autoscan').onclick = () => {
+    if (autoscanActive) {
+      log("AutoScan already running");
+      return;
+    }
+    autoscanActive = true;
+    const intervalSec = parseInt(document.getElementById('scanInterval').value) || 10;
+    log("AutoScan All started");
+    clearInterval(intervalId);
+    intervalId = setInterval(async () => {
+      for (const tokenAddr of Object.values(tokens)) {
+        if (!autoscanActive) return;
+        await scanSingle(tokenAddr);
+      }
+    }, intervalSec * 1000);
+  };
+
+</script>
+
 </body>
 </html>
